@@ -503,6 +503,33 @@ def run_automation(email, password, invite_link, proxy=None, headless=True):
             sys.stdout.flush()
 
             # 2. Leonardo Signup
+            # Intercept /api/auth/get-session untuk capture JWT langsung dari response
+            captured_jwt = {"value": ""}
+            def handle_response(response):
+                try:
+                    if "leonardo.ai/api/auth/get-session" in response.url and response.status == 200:
+                        data = response.json()
+                        # JWT bisa nested di berbagai field
+                        def find_jwt(obj, depth=0):
+                            if depth > 5: return ""
+                            if isinstance(obj, str) and obj.startswith("eyJ") and len(obj) > 100:
+                                return obj
+                            if isinstance(obj, dict):
+                                for v in obj.values():
+                                    r = find_jwt(v, depth+1)
+                                    if r: return r
+                            if isinstance(obj, list):
+                                for v in obj:
+                                    r = find_jwt(v, depth+1)
+                                    if r: return r
+                            return ""
+                        jwt = find_jwt(data)
+                        if jwt:
+                            captured_jwt["value"] = jwt
+                            log_step(f"JWT captured dari get-session intercept!")
+                except Exception: pass
+            page.on("response", handle_response)
+
             log_step("Membuka Leonardo AI — login page...")
             page.goto("https://app.leonardo.ai/auth/login", wait_until="domcontentloaded", timeout=60000)
             time.sleep(3)
@@ -545,27 +572,98 @@ def run_automation(email, password, invite_link, proxy=None, headless=True):
                     last_log_leo = now
                 time.sleep(2)
 
-            # Extract Leonardo cookies
+            # Tunggu Leonardo load penuh (pastikan session tersimpan di storage)
             log_step(f"Dashboard Leonardo tercapai: {page.url[:60]}")
+            log_step("Tunggu Leonardo load penuh untuk capture session...")
+            time.sleep(5)
+
+            # Extract Leonardo cookies
             log_step("Mengekstrak cookies + JWT session Leonardo...")
             all_cookies = page.context.cookies()
             leo_cookies = [c for c in all_cookies if "leonardo.ai" in (c.get("domain") or "")]
+            # Fallback: ambil semua cookie jika leonardo.ai tidak ada
+            if not leo_cookies:
+                leo_cookies = all_cookies
             cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in leo_cookies)
 
-            # Extract JWT dari localStorage
+            # Extract JWT dari localStorage + sessionStorage + cookie values
             jwt_token = ""
             try:
                 jwt_token = page.evaluate("""() => {
+                    // Cek localStorage
                     for (let i = 0; i < localStorage.length; i++) {
                         const k = localStorage.key(i);
                         const v = localStorage.getItem(k) || '';
+                        // JWT biasanya nested JSON di Supabase
+                        if (v.startsWith('{') && v.includes('access_token')) {
+                            try {
+                                const p = JSON.parse(v);
+                                const t = p.access_token || p.token || p.jwt || '';
+                                if (t.startsWith('eyJ') && t.length > 100) return t;
+                            } catch(e) {}
+                        }
+                        if (v.startsWith('eyJ') && v.length > 100) return v;
+                    }
+                    // Cek sessionStorage
+                    for (let i = 0; i < sessionStorage.length; i++) {
+                        const k = sessionStorage.key(i);
+                        const v = sessionStorage.getItem(k) || '';
+                        if (v.startsWith('{') && v.includes('access_token')) {
+                            try {
+                                const p = JSON.parse(v);
+                                const t = p.access_token || p.token || p.jwt || '';
+                                if (t.startsWith('eyJ') && t.length > 100) return t;
+                            } catch(e) {}
+                        }
                         if (v.startsWith('eyJ') && v.length > 100) return v;
                     }
                     return '';
                 }""") or ""
             except Exception: pass
 
-            if not cookie_str and not jwt_token:
+            # Jika JWT masih kosong, coba tunggu lebih lama dan extract lagi
+            if not jwt_token:
+                log_step("JWT belum tersedia, tunggu 8s lagi...")
+                time.sleep(8)
+                try:
+                    jwt_token = page.evaluate("""() => {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const k = localStorage.key(i);
+                            const v = localStorage.getItem(k) || '';
+                            if (v.startsWith('{') && v.includes('access_token')) {
+                                try { const p=JSON.parse(v); const t=p.access_token||''; if(t.startsWith('eyJ')&&t.length>100) return t; } catch(e) {}
+                            }
+                            if (v.startsWith('eyJ') && v.length > 100) return v;
+                        }
+                        return '';
+                    }""") or ""
+                except Exception: pass
+
+            # Prioritas: intercept > localStorage > get-session langsung
+            final_jwt = captured_jwt.get("value") or jwt_token
+            if not final_jwt:
+                log_step("Coba get-session langsung untuk extract JWT...")
+                try:
+                    import urllib.request as _ur
+                    _req = _ur.Request("https://app.leonardo.ai/api/auth/get-session")
+                    _req.add_header("Cookie", cookie_str)
+                    _req.add_header("Accept", "application/json")
+                    _req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    with _ur.urlopen(_req, timeout=10) as _res:
+                        _data = json.loads(_res.read().decode())
+                        def _find_jwt(obj, depth=0):
+                            if depth > 5: return ""
+                            if isinstance(obj, str) and obj.startswith("eyJ") and len(obj) > 100: return obj
+                            if isinstance(obj, dict):
+                                for v in obj.values():
+                                    r = _find_jwt(v, depth+1)
+                                    if r: return r
+                            return ""
+                        final_jwt = _find_jwt(_data)
+                        if final_jwt: log_step("JWT didapat dari get-session fallback!")
+                except Exception as e: log_step(f"get-session fallback gagal: {e}")
+
+            if not cookie_str and not final_jwt:
                 sys.stdout.write(json.dumps({"status": "error", "message": "Gagal extract session Leonardo"}) + "\n")
                 sys.stdout.flush()
                 return False
@@ -573,7 +671,7 @@ def run_automation(email, password, invite_link, proxy=None, headless=True):
             sys.stdout.write(json.dumps({
                 "status": "success",
                 "cookie": cookie_str,
-                "jwt": jwt_token,
+                "jwt": final_jwt,
                 "balance": 150,
                 "left_team": False,
             }) + "\n")
