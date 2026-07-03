@@ -2,7 +2,7 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { log, err } = require("../logger");
 
-const DEFAULT_LOCAL_ROUTER = "http://localhost:20128";
+const DEFAULT_LOCAL_ROUTER = "http://localhost:3001";
 const ROUTER_BASE = String(process.env.MITM_ROUTER_BASE || DEFAULT_LOCAL_ROUTER)
   .trim()
   .replace(/\/+$/, "") || DEFAULT_LOCAL_ROUTER;

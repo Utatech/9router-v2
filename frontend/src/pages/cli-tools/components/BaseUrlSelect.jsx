@@ -32,7 +32,7 @@ const buildOptions = ({ requiresExternalUrl, tunnelEnabled, tunnelPublicUrl, tai
   const opts = [];
   const wrap = (url) => (withV1 ? ensureV1(url) : (url || "").replace(/\/+$/, ""));
   if (!requiresExternalUrl) {
-    const localUrl = wrap(`http://127.0.0.1:${UPDATER_CONFIG.appPort}`);
+    const localUrl = wrap(`http://127.0.0.1:${3001}`);
     opts.push({ value: "local", label: localUrl, url: localUrl });
   }
   if (tunnelEnabled && tunnelPublicUrl) {

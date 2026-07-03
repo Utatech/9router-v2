@@ -10,7 +10,7 @@ import { UPDATER_CONFIG } from "../../../shared/constants/config.js";
 import { DATA_DIR } from "../../../lib/dataDir.js";
 import { getConsistentMachineId } from "../../../shared/utils/machineId.js";
 
-const APP_PORT = UPDATER_CONFIG.appPort;
+const APP_PORT = Number(process.env.PORT) || 3001;
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
 const LOCAL_MCP_PREFIX = `http://localhost:${APP_PORT}/api/mcp/`;
