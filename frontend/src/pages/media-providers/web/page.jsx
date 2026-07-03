@@ -69,7 +69,7 @@ function ComboList({ combos }) {
   return (
     <div className="flex flex-col gap-2">
       {combos.map((combo) => (
-        <Link key={combo.id} href={`/dashboard/media-providers/combo/${combo.id}`}>
+        <Link key={combo.id} to={`/dashboard/media-providers/combo/${combo.id}`}>
           <Card padding="xs" className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors cursor-pointer">
             <div className="flex min-w-0 items-center gap-3">
               <span className="material-symbols-outlined text-primary text-[18px]">layers</span>

@@ -58,12 +58,36 @@ function findRouteFiles(dir: string): string[] {
   return results;
 }
 
+function getSegmentPriority(segment: string): number {
+  if (segment.includes("[...")) return 3;
+  if (segment.includes("[")) return 2;
+  return 1;
+}
+
+function compareRoutePaths(a: string, b: string): number {
+  const aSegs = a.split("/");
+  const bSegs = b.split("/");
+  const len = Math.min(aSegs.length, bSegs.length);
+  for (let i = 0; i < len; i++) {
+    const priA = getSegmentPriority(aSegs[i]);
+    const priB = getSegmentPriority(bSegs[i]);
+    if (priA !== priB) return priA - priB;
+    if (aSegs[i] !== bSegs[i]) return aSegs[i].localeCompare(bSegs[i]);
+  }
+  return bSegs.length - aSegs.length;
+}
+
 /**
  * Build and return the Express router with all routes mounted
  */
 export async function buildAutoRouter(): Promise<Router> {
   const router = Router();
   const routeFiles = findRouteFiles(ROUTES_DIR);
+  routeFiles.sort((a, b) => {
+    const relA = relative(ROUTES_DIR, a);
+    const relB = relative(ROUTES_DIR, b);
+    return compareRoutePaths(relA, relB);
+  });
   let mounted = 0;
 
   for (const file of routeFiles) {
@@ -92,7 +116,12 @@ export async function buildAutoRouter(): Promise<Router> {
         }
         router[expressMethod](expressPath, async (req: Request, res: Response) => {
           try {
-            const result = await handler(req, res);
+            const params: Record<string, any> = { ...req.params };
+            if (isCatchAll) {
+              const matchedPath = req.params[0] || "";
+              params.path = matchedPath ? matchedPath.split("/") : [];
+            }
+            const result = await (handler as any)(req, res, { params });
             
             // If the handler returned a Web Response object (common in Next.js/open-sse)
             if (result && typeof result.status === 'number' && typeof (result as any).headers?.forEach === 'function') {
@@ -107,11 +136,18 @@ export async function buildAutoRouter(): Promise<Router> {
                 // If it's a stream (ReadableStream)
                 if (typeof webRes.body.getReader === 'function') {
                   const reader = webRes.body.getReader();
+                  let closed = false;
+                  
+                  req.on('close', () => {
+                    closed = true;
+                    reader.cancel().catch(() => {});
+                  });
+
                   async function readStream() {
                     try {
-                      while (true) {
+                      while (!closed) {
                         const { done, value } = await reader.read();
-                        if (done) break;
+                        if (done || closed) break;
                         res.write(value);
                       }
                       res.end();

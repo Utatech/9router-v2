@@ -397,6 +397,8 @@ const PROVIDERS = {
   antigravity: {
     config: ANTIGRAVITY_CONFIG,
     flowType: "authorization_code",
+    fixedPort: 51121,
+    callbackPath: "/oauth-callback",
     buildAuthUrl: (config, redirectUri, state) => {
       const params = new URLSearchParams({
         client_id: config.clientId,
@@ -444,14 +446,21 @@ const PROVIDERS = {
       };
       const metadata = getOAuthClientMetadata();
 
-      // Fetch user info
-      const userInfoRes = await fetch(`${ANTIGRAVITY_CONFIG.userInfoUrl}?alt=json`, {
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          "x-request-source": "local",
-        },
-      });
-      const userInfo = userInfoRes.ok ? await userInfoRes.json() : {};
+      // Fetch user info (non-fatal — proceed even if this fails)
+      let userInfo = {};
+      try {
+        const userInfoRes = await fetch(`${ANTIGRAVITY_CONFIG.userInfoUrl}?alt=json`, {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+            "x-request-source": "local",
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (userInfoRes.ok) userInfo = await userInfoRes.json();
+        else console.log("[AG OAuth] userInfo non-ok:", userInfoRes.status);
+      } catch (e) {
+        console.log("[AG OAuth] userInfo fetch failed (non-fatal):", e.message);
+      }
 
       // Load Code Assist to get project ID and tier
       let projectId = "";
@@ -461,6 +470,7 @@ const PROVIDERS = {
           method: "POST",
           headers: loadHeaders,
           body: JSON.stringify({ metadata }),
+          signal: AbortSignal.timeout(15000),
         });
         if (loadRes.ok) {
           const data = await loadRes.json();
@@ -478,28 +488,128 @@ const PROVIDERS = {
         console.log("Failed to load code assist:", e);
       }
 
-      // Fire-and-forget onboarding — does not block DB save
-      if (projectId) {
-        const doOnboard = async () => {
-          for (let i = 0; i < 10; i++) {
+      // Onboard user (provisions GCP project for new accounts)
+      const doOnboard = async (awaitDone = false) => {
+        const maxTries = awaitDone ? 10 : 3;
+        const delayMs = awaitDone ? 5000 : 3000;
+        for (let i = 0; i < maxTries; i++) {
+          try {
+            const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
+              method: "POST",
+              headers: loadHeaders,
+              body: JSON.stringify({ tierId, metadata }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (onboardRes.ok) {
+              const result = await onboardRes.json();
+              console.log("[AG OAuth] onboardUser response:", JSON.stringify(result).slice(0, 300));
+              if (result.done === true) {
+                // Extract project from onboard response
+                const respProject = result.response?.cloudaicompanionProject;
+                if (respProject) {
+                  return typeof respProject === "string" ? respProject.trim() : respProject.id?.trim();
+                }
+                // done but no project in response body — re-call loadCodeAssist
+                const reloadRes = await fetch(ANTIGRAVITY_CONFIG.loadCodeAssistEndpoint, {
+                  method: "POST",
+                  headers: loadHeaders,
+                  body: JSON.stringify({ metadata }),
+                });
+                if (reloadRes.ok) {
+                  const reloadData = await reloadRes.json();
+                  console.log("[AG OAuth] re-loadCodeAssist response:", JSON.stringify(reloadData).slice(0, 300));
+                  const pid = reloadData.cloudaicompanionProject?.id || reloadData.cloudaicompanionProject || "";
+                  if (pid) return typeof pid === "string" ? pid.trim() : pid;
+                }
+                if (awaitDone) break; // done with no project, stop polling
+                return null;
+              }
+            }
+          } catch (e) {
+            console.log("[AG OAuth] onboardUser error:", e.message);
+          }
+          if (awaitDone && i < maxTries - 1) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        }
+        return null;
+      };
+
+      // Quick single attempt to get projectId (non-blocking — don't delay exchange)
+      if (!projectId) {
+        console.log("[AG OAuth] No projectId from loadCodeAssist, trying quick onboard...");
+        try {
+          const quickRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
+            method: "POST",
+            headers: loadHeaders,
+            body: JSON.stringify({ tierId, metadata }),
+            signal: AbortSignal.timeout(8000),
+          });
+          if (quickRes.ok) {
+            const result = await quickRes.json();
+            console.log("[AG OAuth] quick onboard response:", JSON.stringify(result).slice(0, 300));
+            if (result.done === true) {
+              const respProject = result.response?.cloudaicompanionProject;
+              if (respProject) {
+                projectId = typeof respProject === "string" ? respProject.trim() : (respProject.id?.trim() || "");
+              }
+            }
+          }
+        } catch (e) {
+          console.log("[AG OAuth] quick onboard error:", e.message);
+        }
+      }
+
+      // Fire-and-forget background onboarding to update DB with projectId later
+      // (runs after connection is saved, updates projectId if empty)
+      const backgroundOnboard = (savedEmail) => {
+        const backgroundFn = async () => {
+          for (let i = 0; i < 8; i++) {
             try {
-              const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
+              const res = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
                 method: "POST",
                 headers: loadHeaders,
                 body: JSON.stringify({ tierId, metadata }),
+                signal: AbortSignal.timeout(15000),
               });
-              if (onboardRes.ok) {
-                const result = await onboardRes.json();
-                if (result.done === true) break;
+              if (res.ok) {
+                const result = await res.json();
+                if (result.done === true) {
+                  const respProject = result.response?.cloudaicompanionProject;
+                  const pid = respProject
+                    ? (typeof respProject === "string" ? respProject.trim() : respProject.id?.trim())
+                    : null;
+                  if (pid) {
+                    console.log(`[AG OAuth] Background onboard got projectId: ${pid}, updating DB...`);
+                    try {
+                      const { updateProviderConnectionByEmail } = await import("../../lib/localDb.js");
+                      await updateProviderConnectionByEmail(savedEmail, "antigravity", { projectId: pid });
+                      console.log("[AG OAuth] DB updated with projectId:", pid);
+                    } catch (dbErr) {
+                      console.log("[AG OAuth] DB update failed:", dbErr.message);
+                    }
+                    return;
+                  }
+                }
               }
             } catch (e) {
-              break;
+              console.log(`[AG OAuth] Background onboard retry ${i+1} error:`, e.message);
             }
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(r => setTimeout(r, 5000));
           }
+          console.log("[AG OAuth] Background onboard exhausted retries, no projectId obtained");
         };
-        doOnboard().catch(() => {});
+        backgroundFn().catch(() => {});
+      };
+
+      if (!projectId && userInfo?.email) {
+        console.log("[AG OAuth] No projectId after quick onboard, starting background onboard...");
+        backgroundOnboard(userInfo.email);
+      } else if (projectId) {
+        doOnboard(false).catch(() => {});
       }
+
+      // Don't throw — save connection even without projectId; background will fill it in
 
       return { userInfo, projectId };
     },

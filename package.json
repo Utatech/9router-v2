@@ -5,7 +5,8 @@
   "description": "9Router v2 — Monorepo (frontend + backend)",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "backend/open-sse"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",

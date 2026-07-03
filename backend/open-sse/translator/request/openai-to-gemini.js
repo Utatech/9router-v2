@@ -269,7 +269,7 @@ export function openaiToGeminiCLIRequest(model, body, stream) {
 
 // Wrap Gemini CLI format in Cloud Code wrapper
 function wrapInCloudCodeEnvelope(model, geminiCLI, credentials = null, isAntigravity = false) {
-  const projectId = credentials?.projectId || generateProjectId();
+  const projectId = credentials?.projectId?.trim() || generateProjectId();
 
   const envelope = {
     project: projectId,
@@ -318,7 +318,7 @@ function wrapInCloudCodeEnvelope(model, geminiCLI, credentials = null, isAntigra
 
 // Wrap Claude format in Cloud Code envelope for Antigravity
 function wrapInCloudCodeEnvelopeForClaude(model, claudeRequest, credentials = null) {
-  const projectId = credentials?.projectId || generateProjectId();
+  const projectId = credentials?.projectId?.trim() || generateProjectId();
 
   const envelope = {
     project: projectId,

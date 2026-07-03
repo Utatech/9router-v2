@@ -20,12 +20,13 @@ export async function GET(req: any, res: any) {
     const enableRequestLogs = process.env.ENABLE_REQUEST_LOGS === "true";
     const enableTranslator = process.env.ENABLE_TRANSLATOR === "true";
     
+    res.set(SETTINGS_RESPONSE_HEADERS);
     return res.json({ 
       ...safeSettings, 
       enableRequestLogs,
       enableTranslator,
       hasPassword: !!password
-    }, { headers: SETTINGS_RESPONSE_HEADERS });
+    });
   } catch (error) {
     console.log("Error getting settings:", error);
     return res.status(500).json({ error: error.message });
@@ -92,7 +93,8 @@ export async function PATCH_handler(req: any, res: any) {
 
     const { password, oidcClientSecret, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
-    return res.json(safeSettings, { headers: SETTINGS_RESPONSE_HEADERS });
+    res.set(SETTINGS_RESPONSE_HEADERS);
+    return res.json(safeSettings);
   } catch (error) {
     console.log("Error updating settings:", error);
     return res.status(500).json({ error: error.message });

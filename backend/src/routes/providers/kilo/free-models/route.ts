@@ -47,9 +47,8 @@ export async function GET(req: any, res: any) {
       return res.json({ models: cachedModels, cached: true, warning: error.message });
     }
 
-    return res.json(
-      { models: [], error: `Failed to fetch Kilo models: ${error.message}` },
-      { status: 502 }
+    return res.status(502).json(
+      { models: [], error: `Failed to fetch Kilo models: ${error.message}` }
     );
   }
 }

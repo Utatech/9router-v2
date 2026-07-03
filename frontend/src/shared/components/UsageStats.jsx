@@ -314,22 +314,15 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       });
   }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // SSE connection - real-time updates for activeRequests + recentRequests only
+  // SSE connection - real-time updates for all stats (requests, costs, tokens) matching current period
   useEffect(() => {
-    const es = new EventSource("/api/usage/stream");
+    const es = new EventSource(`/api/usage/stream?period=${period}`);
 
     es.onmessage = (e) => {
       try {
         const rawData = JSON.parse(e.data);
         const data = normalizeStatsData(rawData);
-        // Always merge only real-time fields, never overwrite full stats from REST
-        setStats((prev) => ({
-          ...(prev || {}),
-          activeRequests: data.activeRequests,
-          recentRequests: data.recentRequests,
-          errorProvider: data.errorProvider,
-          pending: data.pending,
-        }));
+        setStats(data);
         setLoading(false);
       } catch (err) {
         console.error("[SSE CLIENT] parse error:", err);
@@ -339,7 +332,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
     es.onerror = () => setLoading(false);
 
     return () => es.close();
-  }, []);
+  }, [period]);
 
   const toggleSort = useCallback((tableType, field) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -350,7 +343,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       params.set("sortOrder", "asc");
     }
     navigate(`?${params.toString()}`, { scroll: false });
-  }, [searchParams, router]);
+  }, [searchParams, navigate]);
 
   // Compute active table data
   const activeTableConfig = useMemo(() => {
@@ -517,7 +510,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       )}
 
       {/* Token / Cost chart - sync period */}
-      {loading ? spinner : <UsageChart period={period} />}
+      {loading ? spinner : <UsageChart period={period} lastRequestTime={stats?.recentRequests?.[0]?.timestamp} />}
 
       {/* Table with dropdown selector */}
       <div className="flex flex-col gap-3">

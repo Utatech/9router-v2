@@ -1,6 +1,6 @@
-import { getApiKeys } from "@/lib/localDb";
-import { UPDATER_CONFIG } from "@/shared/constants/config";
-import { getConsistentMachineId } from "@/shared/utils/machineId";
+import { getApiKeys } from "../../../lib/localDb.js";
+import { UPDATER_CONFIG } from "../../../shared/constants/config.js";
+import { getConsistentMachineId } from "../../../shared/utils/machineId.js";
 
 const CLI_TOKEN_SALT = "9r-cli-auth";
 

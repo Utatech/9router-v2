@@ -18,6 +18,11 @@ import {
   registerXaiSession,
   getXaiSessionStatus,
   clearXaiSession,
+  startAntigravityProxy,
+  stopAntigravityProxy,
+  registerAntigravitySession,
+  getAntigravitySessionStatus,
+  clearAntigravitySession,
 } from "../../../../lib/oauth/utils/server.js";
 
 async function completeXaiManualCode(code, state) {
@@ -82,8 +87,8 @@ export async function GET_handler(req: any, res: any, { params }) {
     }
 
     if (action === "start-proxy") {
-      if (!["codex", "xai"].includes(provider)) {
-        return res.status(400).json({ error: "Proxy only supported for codex/xai" });
+      if (!["codex", "xai", "antigravity"].includes(provider)) {
+        return res.status(400).json({ error: "Proxy only supported for codex/xai/antigravity" });
       }
       const appPort = searchParams.get("app_port");
       if (!appPort) {
@@ -94,29 +99,40 @@ export async function GET_handler(req: any, res: any, { params }) {
       const redirectUri = searchParams.get("redirect_uri");
       const result = provider === "xai"
         ? await startXaiProxy(Number(appPort))
+        : provider === "antigravity"
+        ? await startAntigravityProxy(Number(appPort))
         : await startCodexProxy(Number(appPort));
       let serverSide = false;
-      if (result.success && state && codeVerifier && redirectUri) {
-        serverSide = provider === "xai"
-          ? registerXaiSession({ state, codeVerifier, redirectUri })
-          : registerCodexSession({ state, codeVerifier, redirectUri });
+      if (result.success && state && redirectUri) {
+        if (provider === "xai" && codeVerifier) {
+          serverSide = registerXaiSession({ state, codeVerifier, redirectUri });
+        } else if (provider === "antigravity") {
+          serverSide = registerAntigravitySession({ state, redirectUri });
+        } else if (provider === "codex" && codeVerifier) {
+          serverSide = registerCodexSession({ state, codeVerifier, redirectUri });
+        }
       }
       return res.json({ ...result, serverSide });
     }
 
     if (action === "poll-status") {
-      if (!["codex", "xai"].includes(provider)) {
-        return res.status(400).json({ error: "Poll only supported for codex/xai" });
+      if (!["codex", "xai", "antigravity"].includes(provider)) {
+        return res.status(400).json({ error: "Poll only supported for codex/xai/antigravity" });
       }
       const state = searchParams.get("state");
       if (!state) {
         return res.status(400).json({ error: "Missing state" });
       }
-      const session = provider === "xai" ? getXaiSessionStatus(state) : getCodexSessionStatus(state);
+      const session = provider === "xai"
+        ? getXaiSessionStatus(state)
+        : provider === "antigravity"
+        ? getAntigravitySessionStatus(state)
+        : getCodexSessionStatus(state);
       if (!session) return res.json({ status: "unknown" });
       if (session.status === "done" || session.status === "error") {
         const payload = { ...session };
         if (provider === "xai") clearXaiSession(state);
+        else if (provider === "antigravity") clearAntigravitySession(state);
         else clearCodexSession(state);
         return res.json(payload);
       }
@@ -124,10 +140,11 @@ export async function GET_handler(req: any, res: any, { params }) {
     }
 
     if (action === "stop-proxy") {
-      if (!["codex", "xai"].includes(provider)) {
-        return res.status(400).json({ error: "Proxy only supported for codex/xai" });
+      if (!["codex", "xai", "antigravity"].includes(provider)) {
+        return res.status(400).json({ error: "Proxy only supported for codex/xai/antigravity" });
       }
       if (provider === "xai") stopXaiProxy();
+      else if (provider === "antigravity") stopAntigravityProxy();
       else stopCodexProxy();
       return res.json({ success: true });
     }

@@ -141,7 +141,7 @@ export async function POST_handler(req: any, res: any) {
 // DELETE - Stop MITM server (removes all DNS first, then kills server)
 export async function DELETE_handler(req: any, res: any) {
   try {
-    const body = req.body.catch(() => ({}));
+    const body = req.body || {};
     const { sudoPassword } = body;
     const pwd = getPassword(sudoPassword) || await loadEncryptedPassword() || "";
 

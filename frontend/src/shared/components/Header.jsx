@@ -252,7 +252,7 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
                 )}
                 {crumb.href ? (
                   <Link
-                    href={crumb.href}
+                    to={crumb.href}
                     className="text-text-muted hover:text-primary transition-colors"
                   >
                     {crumb.label}

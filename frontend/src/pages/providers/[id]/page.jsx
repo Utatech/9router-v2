@@ -1168,7 +1168,7 @@ export default function ProviderDetailPage() {
       {/* Header */}
       <div className="min-w-0">
         <Link
-          href="/dashboard/providers"
+          to="/dashboard/providers"
           className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
         >
           <span className="material-symbols-outlined text-lg">arrow_back</span>
@@ -1184,13 +1184,12 @@ export default function ProviderDetailPage() {
                 {providerInfo.textIcon || providerInfo.id.slice(0, 2).toUpperCase()}
               </span>
             ) : (
-              <Image
+              <img
                 src={getHeaderIconPath()}
                 alt={providerInfo.name}
                 width={48}
                 height={48}
                 className="max-h-12 max-w-12 rounded-lg object-contain"
-                sizes="48px"
                 onError={() => setHeaderImgError(true)}
               />
             )}

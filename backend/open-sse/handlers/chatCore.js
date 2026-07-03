@@ -20,6 +20,7 @@ import { dedupeTools } from "../utils/toolDeduper.js";
 import { injectCaveman } from "../rtk/caveman.js";
 import { compressMessages, formatRtkLog } from "../rtk/index.js";
 import { sanitizeCodebuddySystemPrompt } from "../utils/codebuddySanitizer.js";
+import { shouldRefreshCredentials } from "../services/oauthCredentialManager.js";
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -187,6 +188,25 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (proxyOptions.connectionProxyEnabled && proxyOptions.connectionNoProxy) {
     const connectionName = credentials?.connectionName || credentials?.connectionId || "unknown";
     log?.debug?.("PROXY", `${provider.toUpperCase()} | ${model} | conn=${connectionName} | no_proxy=${proxyOptions.connectionNoProxy}`);
+  }
+
+  // Proactive token refresh: refresh before request if token expired/expiring
+  if (!executor.noAuth && onCredentialsRefreshed && executor.refreshCredentials) {
+    try {
+      const needsRefresh = executor.needsRefresh
+        ? executor.needsRefresh(credentials)
+        : shouldRefreshCredentials(provider, credentials);
+      if (needsRefresh) {
+        log?.info?.("TOKEN", `${provider.toUpperCase()} | proactive refresh before request`);
+        const newCredentials = await refreshWithRetry(() => executor.refreshCredentials(credentials, log), 2, log);
+        if (newCredentials?.accessToken || newCredentials?.copilotToken) {
+          Object.assign(credentials, newCredentials);
+          try { await onCredentialsRefreshed(newCredentials); } catch (e) { log?.warn?.("TOKEN", `onCredentialsRefreshed (proactive) failed: ${e.message}`); }
+        }
+      }
+    } catch (e) {
+      log?.warn?.("TOKEN", `Proactive refresh error: ${e.message}`);
+    }
   }
 
   // Execute request

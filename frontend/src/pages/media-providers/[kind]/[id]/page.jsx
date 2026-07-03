@@ -1828,7 +1828,7 @@ export default function MediaProviderDetailPage() {
     return () => { cancelled = true; };
   }, [id, isCustom]);
 
-  if (!kindConfig) return return null; // notFound removed
+  if (!kindConfig) return null; // notFound removed
 
   const builtInProvider = AI_PROVIDERS[id];
 
@@ -1837,21 +1837,21 @@ export default function MediaProviderDetailPage() {
     ? (customNode ? { id, name: customNode.name || "Custom Embedding", color: "#6366F1", textIcon: "CE" } : null)
     : builtInProvider;
 
-  if (!isCustom && !builtInProvider) return return null; // notFound removed
-  if (isCustom && !customLoading && !customNode) return return null; // notFound removed
+  if (!isCustom && !builtInProvider) return null; // notFound removed
+  if (isCustom && !customLoading && !customNode) return null; // notFound removed
   if (isCustom && customLoading) {
     return <div className="text-text-muted text-sm py-12 text-center">Loading...</div>;
   }
 
   const kinds = isCustom ? ["embedding"] : (provider.serviceKinds ?? ["llm"]);
-  if (!isCustom && !kinds.includes(kind)) return return null; // notFound removed
+  if (!isCustom && !kinds.includes(kind)) return null; // notFound removed
 
   return (
     <div className="flex flex-col gap-8">
       {/* Back */}
       <div>
         <Link
-          href={`/dashboard/media-providers/${kind}`}
+          to={`/dashboard/media-providers/${kind}`}
           className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
         >
           <span className="material-symbols-outlined text-lg">arrow_back</span>

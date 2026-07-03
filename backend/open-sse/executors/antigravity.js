@@ -42,7 +42,7 @@ export class AntigravityExecutor extends BaseExecutor {
   }
 
   transformRequest(model, body, stream, credentials) {
-    const projectId = credentials?.projectId || this.generateProjectId();
+    const projectId = credentials?.projectId?.trim() || this.generateProjectId();
 
     // Fix contents for Claude models via Antigravity
     const contents = body.request?.contents?.map(c => {
@@ -196,6 +196,27 @@ export class AntigravityExecutor extends BaseExecutor {
     return totalMs > 0 ? totalMs : null;
   }
 
+  parseError(response, bodyText) {
+    let message = bodyText;
+    try {
+      const json = JSON.parse(bodyText);
+      message = json.error?.message || json.message || json.error || bodyText;
+    } catch {}
+
+    const messageStr = typeof message === "string" ? message : JSON.stringify(message);
+    const retryMs = this.parseRetryFromErrorMessage(messageStr);
+
+    if (retryMs) {
+      return {
+        status: HTTP_STATUS.RATE_LIMITED, // Convert 403 quota resets to 429
+        message: messageStr,
+        resetsAtMs: Date.now() + retryMs
+      };
+    }
+
+    return { status: response.status, message: messageStr };
+  }
+
   async execute({ model, body, stream, credentials, signal, log, proxyOptions = null }) {
     const fallbackCount = this.getFallbackCount();
     let lastError = null;
@@ -227,7 +248,8 @@ export class AntigravityExecutor extends BaseExecutor {
           signal
         }, proxyOptions);
 
-        if (response.status === HTTP_STATUS.RATE_LIMITED || response.status === HTTP_STATUS.SERVICE_UNAVAILABLE) {
+        const isForbiddenQuota = response.status === HTTP_STATUS.FORBIDDEN;
+        if (response.status === HTTP_STATUS.RATE_LIMITED || response.status === HTTP_STATUS.SERVICE_UNAVAILABLE || isForbiddenQuota) {
           // Try to get retry time from headers first
           let retryMs = this.parseRetryHeaders(response.headers);
 
@@ -235,38 +257,45 @@ export class AntigravityExecutor extends BaseExecutor {
           if (!retryMs) {
             try {
               const errorBody = await response.clone().text();
+              log?.warn?.("AG403", `Full 403 body: ${errorBody.slice(0, 500)}`);
               const errorJson = JSON.parse(errorBody);
               const errorMessage = errorJson?.error?.message || errorJson?.message || "";
+              log?.warn?.("AG403", `Error message parsed: ${errorMessage}`);
               retryMs = this.parseRetryFromErrorMessage(errorMessage);
             } catch (e) {
               // Ignore parse errors, will fall back to exponential backoff
             }
           }
 
-          if (retryMs && retryMs <= MAX_RETRY_AFTER_MS && retryAfterAttemptsByUrl[urlIndex] < MAX_RETRY_AFTER_RETRIES) {
-            retryAfterAttemptsByUrl[urlIndex]++;
-            log?.debug?.("RETRY", `${response.status} with Retry-After: ${Math.ceil(retryMs / 1000)}s, waiting... (${retryAfterAttemptsByUrl[urlIndex]}/${MAX_RETRY_AFTER_RETRIES})`);
-            await new Promise(resolve => setTimeout(resolve, retryMs));
-            urlIndex--;
-            continue;
-          }
+          // If it is 403 and has no retry limit parsed, do not treat it as rate limit
+          if (isForbiddenQuota && !retryMs) {
+            log?.debug?.("RETRY", `403 Forbidden (non-quota), skipping rate limit handling`);
+          } else {
+            if (retryMs && retryMs <= MAX_RETRY_AFTER_MS && retryAfterAttemptsByUrl[urlIndex] < MAX_RETRY_AFTER_RETRIES) {
+              retryAfterAttemptsByUrl[urlIndex]++;
+              log?.debug?.("RETRY", `${response.status} with Retry-After: ${Math.ceil(retryMs / 1000)}s, waiting... (${retryAfterAttemptsByUrl[urlIndex]}/${MAX_RETRY_AFTER_RETRIES})`);
+              await new Promise(resolve => setTimeout(resolve, retryMs));
+              urlIndex--;
+              continue;
+            }
 
-          // Auto retry only for 429 when retryMs is 0 or undefined
-          if (response.status === HTTP_STATUS.RATE_LIMITED && (!retryMs || retryMs === 0) && retryAttemptsByUrl[urlIndex] < MAX_AUTO_RETRIES) {
-            retryAttemptsByUrl[urlIndex]++;
-            // Exponential backoff: 2s, 4s, 8s...
-            const backoffMs = Math.min(1000 * (2 ** retryAttemptsByUrl[urlIndex]), MAX_RETRY_AFTER_MS);
-            log?.debug?.("RETRY", `429 auto retry ${retryAttemptsByUrl[urlIndex]}/${MAX_AUTO_RETRIES} after ${backoffMs / 1000}s`);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
-            urlIndex--;
-            continue;
-          }
+            // Auto retry only for 429 when retryMs is 0 or undefined
+            if (response.status === HTTP_STATUS.RATE_LIMITED && (!retryMs || retryMs === 0) && retryAttemptsByUrl[urlIndex] < MAX_AUTO_RETRIES) {
+              retryAttemptsByUrl[urlIndex]++;
+              // Exponential backoff: 2s, 4s, 8s...
+              const backoffMs = Math.min(1000 * (2 ** retryAttemptsByUrl[urlIndex]), MAX_RETRY_AFTER_MS);
+              log?.debug?.("RETRY", `429 auto retry ${retryAttemptsByUrl[urlIndex]}/${MAX_AUTO_RETRIES} after ${backoffMs / 1000}s`);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+              urlIndex--;
+              continue;
+            }
 
-          log?.debug?.("RETRY", `${response.status}, Retry-After ${retryMs ? `too long (${Math.ceil(retryMs / 1000)}s)` : 'missing'}, trying fallback`);
-          lastStatus = response.status;
+            log?.debug?.("RETRY", `${response.status}, Retry-After ${retryMs ? `too long (${Math.ceil(retryMs / 1000)}s)` : 'missing'}, trying fallback`);
+            lastStatus = response.status;
 
-          if (urlIndex + 1 < fallbackCount) {
-            continue;
+            if (urlIndex + 1 < fallbackCount) {
+              continue;
+            }
           }
         }
 

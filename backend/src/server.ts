@@ -15,7 +15,9 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false 
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: [FRONTEND_ORIGIN, "http://localhost:5177", "http://localhost:20128"],
+  origin: (origin, callback) => {
+    callback(null, origin || true);
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-9r-cli-token"],

@@ -217,6 +217,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         redirectUri = "http://localhost:1455/auth/callback";
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
+      } else if (provider === "antigravity") {
+        redirectUri = "http://localhost:51121/oauth-callback";
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
@@ -273,7 +275,29 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         }
       }
 
-      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide });
+      // Antigravity: same fixed-port proxy pattern on 51121
+      let antigravityProxyActive = false;
+      let antigravityServerSide = false;
+      if (provider === "antigravity") {
+        try {
+          const proxyUrl = new URL(`/api/oauth/antigravity/start-proxy`, window.location.origin);
+          proxyUrl.searchParams.set("app_port", appPort);
+          proxyUrl.searchParams.set("state", data.state);
+          proxyUrl.searchParams.set("redirect_uri", redirectUri);
+          const proxyRes = await fetch(proxyUrl.toString());
+          const proxyData = await proxyRes.json();
+          antigravityProxyActive = proxyData.success;
+          antigravityServerSide = !!proxyData.serverSide;
+          if (!antigravityProxyActive && proxyData.reason === "port_busy") {
+            throw new Error("Port 51121 in use; close conflicting process and retry");
+          }
+        } catch (e) {
+          if (e?.message) throw e;
+          antigravityProxyActive = false;
+        }
+      }
+
+      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide, antigravityServerSide });
 
       if (provider === "codex" && codexProxyActive) {
         // Proxy active: callback will be handled server-side (auto-exchange) or via channels (fallback)
@@ -288,12 +312,18 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         if (!popupRef.current) {
           setStep("input");
         }
-      } else if (!isLocalhost || provider === "codex" || provider === "xai") {
+      } else if (provider === "antigravity" && antigravityProxyActive) {
+        setStep("waiting");
+        popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
+        if (!popupRef.current) {
+          setStep("input");
+        }
+      } else if (!isLocalhost || provider === "codex" || provider === "xai" || provider === "antigravity") {
         // Non-localhost or proxy failed: manual input mode
         setStep("input");
         window.open(data.authUrl, "_blank");
       } else {
-        // Localhost (non-Codex/xAI): Open popup and wait for message
+        // Localhost (non-Codex/xAI/Antigravity): Open popup and wait for message
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
@@ -324,13 +354,21 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         fetch("/api/oauth/codex/stop-proxy").catch(() => {});
       } else if (provider === "xai") {
         fetch("/api/oauth/xai/stop-proxy").catch(() => {});
+      } else if (provider === "antigravity") {
+        fetch("/api/oauth/antigravity/stop-proxy").catch(() => {});
       }
     }
   }, [isOpen, provider, startOAuthFlow]);
 
   // Fixed-port server-side mode: poll status (proxy auto-exchanges + saves DB)
   useEffect(() => {
-    const pollProvider = authData?.codexServerSide ? "codex" : authData?.xaiServerSide ? "xai" : null;
+    const pollProvider = authData?.codexServerSide 
+      ? "codex" 
+      : authData?.xaiServerSide 
+      ? "xai" 
+      : authData?.antigravityServerSide 
+      ? "antigravity" 
+      : null;
     if (!pollProvider || !authData?.state) return;
     if (callbackProcessedRef.current) return;
     let cancelled = false;
@@ -497,16 +535,21 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       fetch("/api/oauth/codex/stop-proxy").catch(() => {});
     } else if (provider === "xai") {
       fetch("/api/oauth/xai/stop-proxy").catch(() => {});
+    } else if (provider === "antigravity") {
+      fetch("/api/oauth/antigravity/stop-proxy").catch(() => {});
     }
     onClose();
   }, [onClose, provider]);
 
   if (!provider || !providerInfo) return null;
   const isXaiProvider = provider === "xai";
+  const isAntigravityProvider = provider === "antigravity";
   const deviceLoginUrl = deviceData?.verification_uri_complete || deviceData?.verification_uri || "";
-  const modalTitle = isXaiProvider ? "Connect Grok Build OAuth" : `Connect ${providerInfo.name}`;
+  const modalTitle = isXaiProvider ? "Connect Grok Build OAuth" : isAntigravityProvider ? "Connect Antigravity" : `Connect ${providerInfo.name}`;
   const manualPlaceholder = isXaiProvider
     ? "http://127.0.0.1:56121/callback?code=... or copied code"
+    : isAntigravityProvider
+    ? "http://localhost:51121/oauth-callback?code=..."
     : placeholderUrl;
 
   return (

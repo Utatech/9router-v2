@@ -170,6 +170,23 @@ export async function updateProviderConnection(id, data) {
   return result;
 }
 
+export async function updateProviderConnectionByEmail(email, provider, data) {
+  const db = await getAdapter();
+  let result;
+  db.transaction(() => {
+    const row = db.get(
+      `SELECT * FROM providerConnections WHERE email = ? AND provider = ? ORDER BY createdAt DESC LIMIT 1`,
+      [email, provider]
+    );
+    if (!row) { result = null; return; }
+    const existing = rowToConn(row);
+    const merged = { ...existing, ...data, updatedAt: new Date().toISOString() };
+    upsert(db, merged);
+    result = merged;
+  });
+  return result;
+}
+
 export async function deleteProviderConnection(id) {
   const db = await getAdapter();
   let ok = false;

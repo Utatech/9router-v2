@@ -404,9 +404,8 @@ export async function GET_handler(req: any, res: any, { params }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.log(`Error fetching models from ${connection.provider}:`, errorText);
-        return res.json(
-          { error: `Failed to fetch models: ${response.status}` },
-          { status: response.status }
+        return res.status(response.status).json(
+          { error: `Failed to fetch models: ${response.status}` }
         );
       }
 
@@ -445,9 +444,8 @@ export async function GET_handler(req: any, res: any, { params }) {
       if (!response.ok) {
         const errorText = await response.text();
         console.log(`Error fetching models from ${connection.provider}:`, errorText);
-        return res.json(
-          { error: `Failed to fetch models: ${response.status}` },
-          { status: response.status }
+        return res.status(response.status).json(
+          { error: `Failed to fetch models: ${response.status}` }
         );
       }
 
@@ -463,9 +461,8 @@ export async function GET_handler(req: any, res: any, { params }) {
 
     const config = PROVIDER_MODELS_CONFIG[connection.provider];
     if (!config) {
-      return res.json(
-        { error: `Provider ${connection.provider} does not support models listing` },
-        { status: 400 }
+      return res.status(400).json(
+        { error: `Provider ${connection.provider} does not support models listing` }
       );
     }
 
@@ -473,7 +470,7 @@ export async function GET_handler(req: any, res: any, { params }) {
     if (typeof config.customResolver === "function") {
       const result = await config.customResolver(connection);
       if (result.error) {
-        return res.json({ error: result.error }, { status: result.status || 500 });
+        return res.status(result.status || 500).json({ error: result.error });
       }
       return res.json({
         provider: connection.provider,
@@ -519,9 +516,8 @@ export async function GET_handler(req: any, res: any, { params }) {
     if (!response.ok) {
       const errorText = await response.text();
       console.log(`Error fetching models from ${connection.provider}:`, errorText);
-      return res.json(
-        { error: `Failed to fetch models: ${response.status}` },
-        { status: response.status }
+      return res.status(response.status).json(
+        { error: `Failed to fetch models: ${response.status}` }
       );
     }
 

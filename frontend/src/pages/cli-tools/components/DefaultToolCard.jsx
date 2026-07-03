@@ -208,13 +208,12 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
   const renderIcon = () => {
     if (tool.image) {
       return (
-        <Image
+        <img
           src={tool.image}
           alt={tool.name}
           width={32}
           height={32}
           className="size-8 object-contain rounded-lg"
-          sizes="32px"
           onError={(e) => { e.target.style.display = "none"; }}
         />
       );
@@ -223,13 +222,12 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
       return <span className="material-symbols-outlined text-xl" style={{ color: tool.color }}>{tool.icon}</span>;
     }
     return (
-      <Image
+      <img
         src={`/providers/${toolId}.png`}
         alt={tool.name}
         width={32}
         height={32}
         className="size-8 object-contain rounded-lg"
-        sizes="32px"
         onError={(e) => { e.target.style.display = "none"; }}
       />
     );

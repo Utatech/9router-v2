@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/shared/components/layouts";
 // Lazy-loaded pages (code splitting — loads each page only when needed)
 const Landing         = lazy(() => import("./pages/landing/page"));
 const Login           = lazy(() => import("./pages/login/page"));
+const Callback        = lazy(() => import("./pages/callback/page"));
 const Dashboard       = lazy(() => import("./pages/page"));
 const Providers       = lazy(() => import("./pages/providers/page"));
 const ProviderDetail  = lazy(() => import("./pages/providers/[id]/page"));
@@ -25,6 +26,11 @@ const Docs            = lazy(() => import("./pages/docs/page"));
 const Skills          = lazy(() => import("./pages/skills/page"));
 const ConsoleLog      = lazy(() => import("./pages/console-log/page"));
 const MediaProviders  = lazy(() => import("./pages/media-providers/web/page"));
+const MediaProviderKind  = lazy(() => import("./pages/media-providers/[kind]/page"));
+const MediaProviderKindId = lazy(() => import("./pages/media-providers/[kind]/[id]/page"));
+const MediaProviderComboDetail = lazy(() => import("./pages/media-providers/combo/[id]/page"));
+const WeavyPool          = lazy(() => import("./pages/providers/weavy/pool/page"));
+const AmmailTutorial     = lazy(() => import("./pages/automation/ammail-tutorial/page"));
 
 // Auth guard — check if dashboard session cookie is present
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -51,12 +57,14 @@ export default function App() {
           {/* Public */}
           <Route path="/"       element={<Landing />} />
           <Route path="/login"  element={<Login />} />
+          <Route path="/callback" element={<Callback />} />
 
           {/* Protected dashboard */}
           <Route path="/dashboard" element={<RequireAuth><DashboardLayout /></RequireAuth>}>
             <Route index element={<Dashboard />} />
             <Route path="providers"       element={<Providers />} />
             <Route path="providers/new"   element={<ProvidersNew />} />
+            <Route path="providers/weavy/pool" element={<WeavyPool />} />
             <Route path="providers/:id"   element={<ProviderDetail />} />
             <Route path="usage"           element={<Usage />} />
             <Route path="quota"           element={<Quota />} />
@@ -68,6 +76,7 @@ export default function App() {
             <Route path="cli-tools"       element={<CliTools />} />
             <Route path="cli-tools/:toolId" element={<CliToolDetail />} />
             <Route path="automation"      element={<Automation />} />
+            <Route path="automation/ammail-tutorial" element={<AmmailTutorial />} />
             <Route path="basic-chat"      element={<BasicChat />} />
             <Route path="mitm"            element={<Mitm />} />
             <Route path="profile"         element={<Profile />} />
@@ -75,6 +84,9 @@ export default function App() {
             <Route path="skills"          element={<Skills />} />
             <Route path="console-log"     element={<ConsoleLog />} />
             <Route path="media-providers/web" element={<MediaProviders />} />
+            <Route path="media-providers/:kind" element={<MediaProviderKind />} />
+            <Route path="media-providers/:kind/:id" element={<MediaProviderKindId />} />
+            <Route path="media-providers/combo/:id" element={<MediaProviderComboDetail />} />
           </Route>
 
           {/* Fallback */}

@@ -29,12 +29,12 @@ export async function POST_handler(req: any, res: any) {
     const machineId = await getConsistentMachineId();
     const apiKey = await createApiKey(name, machineId);
 
-    return res.json({
+    return res.status(201).json({
       key: apiKey.key,
       name: apiKey.name,
       id: apiKey.id,
       machineId: apiKey.machineId,
-    }, { status: 201 });
+    });
   } catch (error) {
     console.log("Error creating key:", error);
     return res.status(500).json({ error: "Failed to create key" });

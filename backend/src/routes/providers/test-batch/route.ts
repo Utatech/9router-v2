@@ -65,9 +65,8 @@ export async function POST_handler(req: any, res: any) {
     } else if (mode === "all") {
       connectionsToTest = allConnections;
     } else {
-      return res.json(
-        { error: "Invalid mode. Use: provider, oauth, free, apikey, compatible, all" },
-        { status: 400 }
+      return res.status(400).json(
+        { error: "Invalid mode. Use: provider, oauth, free, apikey, compatible, all" }
       );
     }
 

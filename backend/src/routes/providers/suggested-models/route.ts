@@ -18,11 +18,11 @@ export async function GET_handler(req: any, res: any) {
   }
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
+    const fetchRes = await fetch(url);
+    if (!fetchRes.ok) {
       return res.json({ data: [] });
     }
-    const json = await res.json();
+    const json = await fetchRes.json();
     const raw = json.data ?? json.models ?? json;
     const data = filter(Array.isArray(raw) ? raw : []);
     return res.json({ data });

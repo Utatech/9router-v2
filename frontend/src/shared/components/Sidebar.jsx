@@ -120,14 +120,13 @@ export default function Sidebar({ onClose }) {
         {/* Logo */}
         <div className="px-6 py-4 flex flex-col gap-2">
           <Link to="/dashboard" className="flex items-center gap-3">
-            <div className="flex items-center justify-center size-9 rounded-[10px] bg-gradient-to-br from-brand-500 to-brand-700 shadow-[var(--shadow-warm)]">
-              <span className="material-symbols-outlined text-white text-[20px]">hub</span>
-            </div>
+            <img src="/logo_v2.png" alt="9Router v2" className="size-9 rounded-[10px] object-cover" />
             <div className="flex flex-col">
-              <h1 className="text-lg font-semibold tracking-tight text-text-main">
-                {APP_CONFIG.name}
+              <h1 className="text-lg font-semibold tracking-tight text-text-main leading-tight">
+                9Router v2
               </h1>
-              <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
+              <span className="text-[10px] text-text-muted mt-0.5 leading-none">by ahwanulm</span>
+              <span className="text-[10px] text-text-muted opacity-75 mt-0.5 leading-none">v{APP_CONFIG.version}</span>
             </div>
           </Link>
           {updateInfo && (
@@ -161,7 +160,7 @@ export default function Sidebar({ onClose }) {
           {navItems.map((item) => (
             <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -209,7 +208,7 @@ export default function Sidebar({ onClose }) {
                 {MEDIA_PROVIDER_KINDS.filter((k) => VISIBLE_MEDIA_KINDS.includes(k.id)).map((kind) => (
                   <Link
                     key={kind.id}
-                    href={`/dashboard/media-providers/${kind.id}`}
+                    to={`/dashboard/media-providers/${kind.id}`}
                     onClick={onClose}
                     className={cn(
                       "flex items-center gap-3 px-4 py-1 rounded-lg transition-all group",
@@ -224,7 +223,7 @@ export default function Sidebar({ onClose }) {
                 ))}
                 <Link
                   key={COMBINED_WEB_ITEM.id}
-                  href={COMBINED_WEB_ITEM.href}
+                  to={COMBINED_WEB_ITEM.href}
                   onClick={onClose}
                   className={cn(
                     "flex items-center gap-3 px-4 py-1 rounded-lg transition-all group",
@@ -242,7 +241,7 @@ export default function Sidebar({ onClose }) {
             {systemItems.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                to={item.href}
                 onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -269,7 +268,7 @@ export default function Sidebar({ onClose }) {
               return show ? (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  to={item.href}
                   onClick={onClose}
                   className={cn(
                     "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -307,7 +306,7 @@ export default function Sidebar({ onClose }) {
 
             {/* Settings */}
             <Link
-              href="/dashboard/profile"
+              to="/dashboard/profile"
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",

@@ -76,7 +76,7 @@ export default function NewProviderPage() {
       {/* Header */}
       <div className="mb-8">
         <Link
-          href="/dashboard/providers"
+          to="/dashboard/providers"
           className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
         >
           <span className="material-symbols-outlined text-lg">arrow_back</span>
