@@ -1664,15 +1664,19 @@ def main():
                 log_step(f"Account Resources React Select: {ar_opened}")
 
                 if "clicked" in ar_opened:
-                    time.sleep(2)  # Wait for async option load
-                    # Log available options
-                    opts_text = page.evaluate("""
-                        () => {
-                            const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
-                            return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
-                        }
-                    """)
-                    log_step(f"Account Resources options: {opts_text}")
+                    # Wait up to 5s for async option load (new CF accounts take time)
+                    opts_text = []
+                    for _wait in range(5):
+                        time.sleep(1)
+                        opts_text = page.evaluate("""
+                            () => {
+                                const opts = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+                                return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim());
+                            }
+                        """)
+                        if opts_text:
+                            break
+                    log_step(f"Account Resources options (after wait): {opts_text}")
 
                     if opts_text:
                         # Click first option
@@ -1683,23 +1687,29 @@ def main():
                             time.sleep(0.5)
                             log_step(f"Account Resources selected: {txt[:60]}")
                     else:
-                        # No options yet — React Select may need more time or keyboard nav
-                        log_step("No options visible — trying keyboard ArrowDown")
-                        try:
-                            page.keyboard.press("ArrowDown")
-                            time.sleep(1)
-                            opts2 = page.locator("[class*='react-select__option']").all()
-                            log_step(f"Options after ArrowDown: {len(opts2)}")
-                            if opts2:
-                                txt2 = opts2[0].text_content() or "?"
-                                opts2[0].click()
-                                time.sleep(0.5)
-                                log_step(f"Account Resources ArrowDown select: {txt2[:60]}")
-                            else:
-                                page.keyboard.press("Escape")
-                                log_step("Account Resources: no options — leaving empty, will try API fallback")
-                        except Exception as e:
-                            log_step(f"Account Resources ArrowDown: {e}")
+                        # No options — CF new account dropdown empty
+                        # Strategy: inject account_id directly into React Select hidden input
+                        page.keyboard.press("Escape")
+                        inject_result = page.evaluate(f"""
+                            () => {{
+                                // React Select stores hidden inputs for form submission
+                                // Account Resources likely has input with name containing 'account' or 'resource'
+                                // Try to set the React Select value by manipulating its internal state
+                                const allInputs = Array.from(document.querySelectorAll('input[type="hidden"]'));
+                                for (const inp of allInputs) {{
+                                    const n = inp.name || '';
+                                    if (n.toLowerCase().includes('account') || n.toLowerCase().includes('resource')) {{
+                                        inp.value = '{account_id}';
+                                        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                        return 'injected account_id into: ' + n;
+                                    }}
+                                }}
+                                // Fallback: log all hidden inputs to understand the form structure
+                                const hidden = allInputs.map(i => i.name + '=' + i.value.substring(0,20));
+                                return 'no account input found. hidden inputs: ' + hidden.slice(0,10).join(', ');
+                            }}
+                        """)
+                        log_step(f"Account Resources inject: {inject_result}")
             except Exception as e:
                 log_step(f"Account Resources error: {e}")
 
@@ -1767,44 +1777,40 @@ def main():
                     # a92d2450e05d4e7bb7d0a64968f83d11 = Workers AI Read
                     # bacc64e0f6c34fc0883a1223f938a104 = Workers AI Edit  
                     # account_id is available from earlier login step
-                    api_result = page.evaluate(f"""
-                        async () => {{
-                            const resp = await fetch('https://api.cloudflare.com/client/v4/user/tokens', {{
-                                method: 'POST',
-                                credentials: 'include',
-                                headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{
-                                    name: 'Workers AI',
-                                    policies: [{{
-                                        effect: 'allow',
-                                        resources: {{
-                                            'com.cloudflare.api.account.{account_id}': '*'
-                                        }},
-                                        permission_groups: [
-                                            {{ id: 'a92d2450e05d4e7bb7d0a64968f83d11' }},
-                                            {{ id: 'bacc64e0f6c34fc0883a1223f938a104' }}
-                                        ]
-                                    }}]
-                                }})
-                            }});
-                            const data = await resp.json();
-                            return JSON.stringify({{ status: resp.status, body: data }});
-                        }}
-                    """)
-                    log_step(f"CF API token create: {str(api_result)[:300]}")
+                    # page.request.fetch uses browser cookies (avoids CORS — runs outside browser JS)
                     import json as _json
-                    api_parsed = _json.loads(api_result)
-                    if api_parsed.get("status") == 200:
-                        result_body = api_parsed.get("body", {})
-                        if result_body.get("success") and result_body.get("result", {}).get("value"):
-                            api_token = result_body["result"]["value"]
+                    api_payload = _json.dumps({
+                        "name": "Workers AI",
+                        "policies": [{
+                            "effect": "allow",
+                            "resources": {
+                                f"com.cloudflare.api.account.{account_id}": "*"
+                            },
+                            "permission_groups": [
+                                {"id": "a92d2450e05d4e7bb7d0a64968f83d11"},
+                                {"id": "bacc64e0f6c34fc0883a1223f938a104"}
+                            ]
+                        }]
+                    })
+                    api_resp = page.request.fetch(
+                        "https://api.cloudflare.com/client/v4/user/tokens",
+                        method="POST",
+                        headers={"Content-Type": "application/json", "Accept": "application/json"},
+                        data=api_payload
+                    )
+                    log_step(f"CF API /user/tokens status: {api_resp.status}")
+                    if api_resp.status in (200, 201):
+                        api_data = api_resp.json()
+                        if api_data.get("success") and api_data.get("result", {}).get("value"):
+                            api_token = api_data["result"]["value"]
                             log_step(f"CF API token created: {api_token[:10]}...")
                             output_result({"status": "ok", "email": args.email, "api_key": api_token, "account_id": account_id})
                             sys.exit(0)
                         else:
-                            log_step(f"CF API token create failed: {result_body.get('errors', 'unknown')}")
+                            log_step(f"CF API token create failed: {api_data.get('errors', 'unknown')}")
                     else:
-                        log_step(f"CF API HTTP {api_parsed.get('status')} — body: {str(api_result)[:200]}")
+                        body_text = api_resp.text()[:300]
+                        log_step(f"CF API HTTP {api_resp.status}: {body_text}")
                 except Exception as e:
                     log_step(f"CF API fallback error: {e}")
 
