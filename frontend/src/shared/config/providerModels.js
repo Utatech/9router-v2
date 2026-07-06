@@ -64,12 +64,12 @@ export const PROVIDER_MODELS = {
     { id: "gpt-5.4", name: "GPT 5.4" },
     { id: "gpt-5.4-mini", name: "GPT 5.4 Mini" },
     // GPT 5.3 Codex - all thinking levels
-    { id: "gpt-5.3-codex", name: "GPT 5.3 Codex" },
-    { id: "gpt-5.3-codex-xhigh", name: "GPT 5.3 Codex (xHigh)" },
-    { id: "gpt-5.3-codex-high", name: "GPT 5.3 Codex (High)" },
-    { id: "gpt-5.3-codex-low", name: "GPT 5.3 Codex (Low)" },
-    { id: "gpt-5.3-codex-none", name: "GPT 5.3 Codex (None)" },
-    { id: "gpt-5.3-codex-spark", name: "GPT 5.3 Codex Spark" },
+    { id: "gpt-5.3-codex", name: "GPT 5.3 Codex", upstreamModelId: "gpt-5.5" },
+    { id: "gpt-5.3-codex-xhigh", name: "GPT 5.3 Codex (xHigh)", upstreamModelId: "gpt-5.5" },
+    { id: "gpt-5.3-codex-high", name: "GPT 5.3 Codex (High)", upstreamModelId: "gpt-5.5" },
+    { id: "gpt-5.3-codex-low", name: "GPT 5.3 Codex (Low)", upstreamModelId: "gpt-5.5" },
+    { id: "gpt-5.3-codex-none", name: "GPT 5.3 Codex (None)", upstreamModelId: "gpt-5.5" },
+    { id: "gpt-5.3-codex-spark", name: "GPT 5.3 Codex Spark", upstreamModelId: "gpt-5.5" },
     // Image models (uses image_generation tool, requires Plus/Pro plan)
     { id: "gpt-5.5-image", name: "GPT 5.5 Image", type: "image", capabilities: ["text2img", "edit"],
       description: "OpenAI GPT 5.5 image generation via Codex Responses API. Requires ChatGPT Plus or Pro plan.",
@@ -469,9 +469,9 @@ export const PROVIDER_MODELS = {
     { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", name: "Mistral Small 3.1 24B Instruct" },
     { id: "@cf/meta/llama-3.1-70b-instruct-fp8-fast", name: "Llama 3.1 70B Instruct FP8 Fast" },
     { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", name: "Llama 3.3 70B Instruct FP8 Fast" },
-    { id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", name: "DeepSeek R1 Distill Qwen 32B" },
-    { id: "@cf/moonshotai/kimi-k2.5", name: "Kimi K2.5" },
-    { id: "@cf/moonshotai/kimi-k2.6", name: "Kimi K2.6" },
+    { id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", name: "DeepSeek R1 Distill Qwen 32B", strip: ["thinking"] },
+    { id: "@cf/moonshotai/kimi-k2.5", name: "Kimi K2.5", strip: ["thinking"] },
+    { id: "@cf/moonshotai/kimi-k2.6", name: "Kimi K2.6", strip: ["thinking"] },
     { id: "@cf/zai-org/glm-5.2", name: "GLM 5.2 (Agentic Coding)" },
     { id: "@cf/zai-org/glm-4.7-flash", name: "GLM 4.7 Flash" },
     { id: "@cf/qwen/qwq-32b", name: "QwQ 32B" },
@@ -1590,8 +1590,13 @@ export function getModelUpstreamId(aliasOrId, modelId) {
   const models = PROVIDER_MODELS[aliasOrId];
   const found = models?.find(m => m.id === modelId);
   if (found?.upstreamModelId) return found.upstreamModelId;
-  if (aliasOrId === "cx" && typeof modelId === "string" && modelId.endsWith(CODEX_REVIEW_SUFFIX)) {
-    return modelId.slice(0, -CODEX_REVIEW_SUFFIX.length);
+  if (aliasOrId === "cx" && typeof modelId === "string") {
+    const suffixes = ["-high", "-low", "-xhigh", "-none", "-spark", "-review"];
+    for (const suffix of suffixes) {
+      if (modelId.endsWith(suffix)) {
+        return modelId.slice(0, -suffix.length);
+      }
+    }
   }
   return modelId;
 }
