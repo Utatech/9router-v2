@@ -1267,37 +1267,55 @@ def main():
                                 page.screenshot(path="/tmp/cf_otp_filled.png")
 
                                 # Solve Turnstile inside the Global API Key modal (if present)
-                                log_step("Checking for Turnstile in GAK modal...")
-                                for _ts_attempt in range(8):
+                                # Log ALL frames to diagnose
+                                all_frame_urls = [f.url[:80] for f in page.frames if f.url and f.url != 'about:blank']
+                                log_step(f"GAK modal frames: {all_frame_urls}")
+
+                                for _ts_attempt in range(10):
                                     try:
-                                        cf_frames = [f for f in page.frames if 'challenges.cloudflare.com' in f.url]
-                                        for _f in cf_frames:
-                                            try:
-                                                cb = _f.locator("input[type='checkbox']")
-                                                if cb.count() > 0 and cb.is_visible(timeout=1000):
-                                                    cb.click()
-                                                    time.sleep(2)
-                                                    log_step("GAK modal Turnstile clicked")
-                                                    break
-                                            except Exception:
-                                                pass
-                                        # Check if turnstile is solved (response hidden input)
-                                        _ts_solved = page.evaluate("!!document.querySelector('[name=cf_challenge_response],[name=g-recaptcha-response]')?.value")
-                                        if _ts_solved:
-                                            log_step("GAK Turnstile solved")
+                                        # Try ALL frames (not just challenges.cloudflare.com)
+                                        for _f in page.frames:
+                                            if _f.url and _f.url != 'about:blank':
+                                                try:
+                                                    cb = _f.locator("input[type='checkbox']")
+                                                    if cb.count() > 0 and cb.is_visible(timeout=800):
+                                                        cb.click()
+                                                        time.sleep(2)
+                                                        log_step(f"GAK Turnstile clicked in frame: {_f.url[:60]}")
+                                                        break
+                                                except Exception:
+                                                    pass
+                                        # Check if solved
+                                        _ts_resp = page.evaluate("""
+                                            () => {
+                                                const r = document.querySelector('[name=cf_challenge_response],[name=g-recaptcha-response]');
+                                                const hidden = Array.from(document.querySelectorAll('input[type=hidden]')).find(i=>i.value&&i.value.length>20);
+                                                return r?.value || hidden?.value || null;
+                                            }
+                                        """)
+                                        if _ts_resp:
+                                            log_step(f"GAK Turnstile response found (len={len(str(_ts_resp))})")
                                             break
                                     except Exception:
                                         pass
                                     time.sleep(1)
 
-                                # Click Verify/View button after OTP + Turnstile
-                                for btn_sel in ["button:has-text('View')", "button:has-text('Verify')", "button:has-text('Confirm')", "button:has-text('Submit')", "button[type='submit']"]:
+                                page.screenshot(path="/tmp/cf_gak_before_submit.png")
+
+                                # Click View button inside the dialog, then Submit
+                                for btn_sel in [
+                                    "[role='dialog'] button:has-text('View')",
+                                    "[role='dialog'] button[type='submit']",
+                                    "button:has-text('View')",
+                                    "button[type='submit']",
+                                ]:
                                     try:
                                         b = page.locator(btn_sel).first
                                         if b.count() > 0 and b.is_visible(timeout=2000):
                                             b.click()
                                             time.sleep(5)
                                             log_step(f"OTP submitted via: {btn_sel}")
+                                            page.screenshot(path="/tmp/cf_gak_after_submit.png")
                                             break
                                     except Exception:
                                         continue
