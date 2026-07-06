@@ -1641,76 +1641,68 @@ def main():
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(1)
 
-            # Account Resources must be set — template leaves it as "Select..."
-            # Strategy: find the Select... placeholder in Account Resources row, click it,
-            # then click the FIRST visible option (might be account name, not "All accounts")
+            # Account Resources — screenshot shows NATIVE <select> HTML dropdown (not React)
+            # "Include [Select... ▼]" — second dropdown is a native <select> with account options
+            # Strategy: find the native <select> that has empty/placeholder value, pick first option
             try:
-                ar_result = page.evaluate("""
+                acct_result = page.evaluate("""
                     () => {
-                        const all = Array.from(document.querySelectorAll('*'));
-                        for (const el of all) {
-                            if (el.children.length === 0 && el.textContent.trim() === 'Select...') {
-                                el.click();
-                                return 'clicked: ' + el.tagName + ' ' + el.className.substring(0,30);
+                        // Find all <select> elements on the page
+                        const selects = Array.from(document.querySelectorAll('select'));
+                        for (const sel of selects) {
+                            const opts = Array.from(sel.options);
+                            // Find a select that has empty/placeholder first option
+                            if (opts.length > 0 && (opts[0].value === '' || opts[0].text.includes('Select'))) {
+                                // Get all real options (non-placeholder)
+                                const realOpts = opts.filter(o => o.value !== '' && !o.text.includes('Select'));
+                                if (realOpts.length > 0) {
+                                    // Pick the first real option
+                                    sel.value = realOpts[0].value;
+                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return 'selected: ' + realOpts[0].text + ' (value: ' + realOpts[0].value + ')';
+                                }
+                                // If only empty options, try selecting index 0
+                                return 'select found but only empty options: ' + opts.map(o=>o.text).join(', ');
                             }
                         }
-                        return 'not found';
+                        // Fallback: try selecting the second select (Account Resources is usually 2nd)
+                        if (selects.length >= 2) {
+                            const sel = selects[1];
+                            const opts = Array.from(sel.options);
+                            if (opts.length > 1) {
+                                sel.selectedIndex = 1;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                return 'selected index 1 on selects[1]: ' + opts[1].text;
+                            }
+                        }
+                        return 'no suitable select found (total selects: ' + selects.length + ')';
                     }
                 """)
-                log_step(f"Account Resources Select...: {ar_result}")
-                if "clicked" in ar_result:
-                    time.sleep(1.0)
-                    # Log all visible options for debugging
+                log_step(f"Account Resources native select: {acct_result}")
+
+                # Playwright fallback: select_option on the Account Resources <select>
+                if "no suitable" in acct_result or "only empty" in acct_result:
                     try:
-                        opts_text = page.evaluate("""
-                            () => {
-                                const opts = Array.from(document.querySelectorAll("[role='option'], li[class*='option'], [class*='menu'] [class*='option']"));
-                                return opts.filter(o => o.offsetParent !== null).map(o => o.textContent.trim()).slice(0, 10);
-                            }
-                        """)
-                        log_step(f"Account Resources options: {opts_text}")
-                    except Exception:
-                        pass
-
-                    # Try "All accounts" text first, then fall back to first available option
-                    acct_selected = False
-                    for opt_sel in [
-                        "text='All accounts'",
-                        "[role='option']:has-text('All accounts')",
-                        "li:has-text('All accounts')",
-                        "text='All Accounts'",
-                    ]:
-                        try:
-                            opt = page.locator(opt_sel).first
-                            if opt.count() > 0 and opt.is_visible(timeout=1000):
-                                opt.click()
-                                time.sleep(0.5)
-                                log_step(f"Account Resources selected via: {opt_sel}")
-                                acct_selected = True
-                                break
-                        except Exception:
-                            continue
-
-                    # Last resort: click the first visible option (whatever it is)
-                    if not acct_selected:
-                        try:
-                            first_opt = page.locator("[role='option'], li[class*='option']").first
-                            if first_opt.count() > 0 and first_opt.is_visible(timeout=1000):
-                                txt = first_opt.text_content() or "?"
-                                first_opt.click()
-                                time.sleep(0.5)
-                                log_step(f"Account Resources first option selected: {txt[:50]}")
-                                acct_selected = True
-                        except Exception as e:
-                            log_step(f"Account Resources first option failed: {e}")
-
-                    if not acct_selected:
-                        # Try Playwright locator approach as final fallback
-                        try:
-                            page.get_by_role("option").first.click(timeout=1000)
-                            log_step("Account Resources: get_by_role option clicked")
-                        except Exception:
-                            log_step("Account Resources: all strategies failed")
+                        # Find <select> near "Account Resources" text using locator
+                        for sel_loc in [
+                            "section:has-text('Account Resources') select",
+                            "[class*='account'] select",
+                            "select:near(:text('Account Resources'))",
+                        ]:
+                            try:
+                                s = page.locator(sel_loc).first
+                                if s.count() > 0:
+                                    opts = s.evaluate("el => Array.from(el.options).map(o => ({v: o.value, t: o.text}))")
+                                    log_step(f"Account select options: {opts}")
+                                    non_empty = [o for o in opts if o['v']]
+                                    if non_empty:
+                                        s.select_option(value=non_empty[0]['v'])
+                                        log_step(f"Account Resources Playwright: {non_empty[0]['t']}")
+                                    break
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        log_step(f"Account Resources Playwright fallback: {e}")
             except Exception as e:
                 log_step(f"Account Resources error: {e}")
 
