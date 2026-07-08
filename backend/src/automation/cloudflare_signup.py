@@ -1551,6 +1551,30 @@ def main():
                 _key_regex = r'\b([a-f0-9]{36,45})\b'
 
                 for _gk_poll in range(30):
+                    if _gk_poll == 0:
+                        # First poll — dump full page content to diagnose where key appears
+                        try:
+                            _body_dump = page.inner_text("body")
+                            log_step(f"GAK body after modal close (first 500): {_body_dump[:500]}")
+                            # Also dump all visible text values
+                            _all_dom = page.evaluate("""
+                                () => {
+                                    const vals = [];
+                                    document.querySelectorAll('*').forEach(el => {
+                                        if (el.children.length === 0) {
+                                            const t = (el.textContent || el.value || '').trim();
+                                            if (t.length >= 30 && t.length <= 60 && /^[a-f0-9]+$/.test(t)) {
+                                                vals.push(el.tagName + ': ' + t);
+                                            }
+                                        }
+                                    });
+                                    return vals.join(' | ');
+                                }
+                            """)
+                            log_step(f"GAK hex strings in DOM: {_all_dom or 'none'}")
+                            page.screenshot(path="/tmp/cf_gak_poll0.png")
+                        except Exception as _dump_e:
+                            log_step(f"GAK body dump error: {_dump_e}")
                     page.screenshot(path="/tmp/cf_globalkey_page.png")
                     try:
                         # 1. Check ALL input + TEXTAREA values via evaluate
