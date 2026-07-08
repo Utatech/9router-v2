@@ -1195,9 +1195,30 @@ def main():
             import requests as _req
             log_step("Mencoba ambil Global API Key dari dashboard...")
             try:
-                # Navigate to API keys page — force reload so Global API Key section is visible
-                page.goto("https://dash.cloudflare.com/profile/api-tokens", wait_until="domcontentloaded", timeout=20000)
-                time.sleep(3)
+                # Navigate to API keys page — CF React SPA takes time to mount.
+                # Retry navigate + wait up to 3x if still showing loading spinner.
+                for _nav_attempt in range(3):
+                    page.goto("https://dash.cloudflare.com/profile/api-tokens", wait_until="domcontentloaded", timeout=25000)
+                    # Wait for actual content (not just loading spinner)
+                    _page_ready = False
+                    for _wait_sel in [
+                        "text=Global API Key",
+                        "button:has-text('View')",
+                        "h1, h2, h3, [role='heading']",
+                    ]:
+                        try:
+                            page.wait_for_selector(_wait_sel, timeout=12000)
+                            log_step(f"API tokens page ready via: {_wait_sel}")
+                            _page_ready = True
+                            break
+                        except Exception:
+                            continue
+                    if _page_ready:
+                        break
+                    log_step(f"API tokens page not ready (attempt {_nav_attempt+1}), retry...")
+                    time.sleep(3)
+
+                time.sleep(2)
                 page.screenshot(path="/tmp/cf_gak_page.png")
                 _pg_txt = page.inner_text("body")
                 _gidx = _pg_txt.find("Global")
@@ -1205,7 +1226,7 @@ def main():
 
                 # Scroll to bottom to reveal Global API Key section
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                time.sleep(1)
+                time.sleep(2)
 
                 # Click on "Global API Key" > "View" button
                 view_clicked = False
