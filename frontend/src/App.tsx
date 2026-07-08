@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState, useEffect } from "react";
 import { DashboardLayout } from "@/shared/components/layouts";
 
 // Lazy-loaded pages (code splitting — loads each page only when needed)
@@ -32,12 +32,41 @@ const MediaProviderComboDetail = lazy(() => import("./pages/media-providers/comb
 const WeavyPool          = lazy(() => import("./pages/providers/weavy/pool/page"));
 const AmmailTutorial     = lazy(() => import("./pages/automation/ammail-tutorial/page"));
 
-// Auth guard — check if dashboard session cookie is present
+// Auth guard — verifies session with backend on every mount
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  // Simple check — backend /api/auth/status will confirm
-  const hasSession = document.cookie.includes("9r_session") ||
-                     localStorage.getItem("9r_authed") === "1";
-  if (!hasSession) return <Navigate to="/login" replace />;
+  const [status, setStatus] = useState<"checking" | "ok" | "denied">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    fetch("/api/auth/status", { signal: controller.signal, credentials: "include" })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => {
+        clearTimeout(timeoutId);
+        if (cancelled) return;
+        if (data.requireLogin === false || data.isLoggedIn === true) {
+          localStorage.setItem("9r_authed", "1");
+          setStatus("ok");
+        } else {
+          localStorage.removeItem("9r_authed");
+          setStatus("denied");
+        }
+      })
+      .catch(() => {
+        clearTimeout(timeoutId);
+        if (!cancelled) setStatus("denied");
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  if (status === "checking") return <LoadingFallback />;
+  if (status === "denied") return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
