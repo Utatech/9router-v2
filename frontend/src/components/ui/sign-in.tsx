@@ -89,7 +89,7 @@ const TestimonialCard = ({ testimonial, delay }: { testimonial: Testimonial, del
 // --- MAIN COMPONENT ---
 
 export const SignInPage: React.FC<SignInPageProps> = ({
-  title = <span className="font-light text-zinc-900 dark:text-zinc-100 tracking-tighter">Welcome to 9Router</span>,
+  title = <span className="font-light text-zinc-900 dark:text-zinc-100 tracking-tighter">Welcome to AMRouter</span>,
   description = "Enter your credentials to access the dashboard",
   heroImageSrc,
   testimonials = [],

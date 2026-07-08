@@ -4,6 +4,14 @@ All notable changes to the decoupled **9Router v2** platform will be documented 
 
 ---
 
+## [v0.6.2] - 2026-07-08
+
+### Changed
+- **Rebranding — AMRouter**: Sidebar, login page, favicon, and browser tab title updated from "9Router v2" to "AMRouter" to match the renamed GitHub repository.
+- **New Logo**: App icon updated with a new AMRouter logo (orange circuit-board "AM" motif on dark background).
+
+---
+
 ## [v0.6.1] - 2026-07-08
 
 ### Fixed
